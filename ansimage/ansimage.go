@@ -69,21 +69,48 @@ type ANSImage struct {
 	h, w     int
 	maxprocs int
 	pixmap   [][]*ANSIpixel
+	render   RenderFunc
 }
 
-// Render returns the ANSI-compatible string form of ANSI-pixel.
-func (ap *ANSIpixel) Render() string {
+// RenderFunc returns the ANSI representation of an ANSIpixel
+type RenderFunc func(ap *ANSIpixel) string
+
+// Render24Bit renders a pixel using 24 bit RGB
+func Render24Bit(ap *ANSIpixel) string {
 	if ap.upper {
-		return fmt.Sprintf(
-			"\033[48;2;%d;%d;%dm",
-			ap.R, ap.G, ap.B,
-		)
+		return fmt.Sprintf("\033[48;2;%d;%d;%dm", ap.R, ap.G, ap.B)
 	}
-	return fmt.Sprintf(
-		"\033[38;2;%d;%d;%dm%s",
-		ap.R, ap.G, ap.B,
-		lowerHalfBlock,
-	)
+	return fmt.Sprintf("\033[38;2;%d;%d;%dm%s", ap.R, ap.G, ap.B, lowerHalfBlock)
+}
+
+// Render256Color renders a pixel using the ANSI 256 color mode
+// https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
+func Render256Color(ap *ANSIpixel) string {
+	project := func(v uint8) uint8 { return uint8((float32(v) / 256) * 6) }
+
+	rgb := 16 + (36*project(ap.R) + 6*project(ap.G) + project(ap.B))
+	if ap.upper {
+		return fmt.Sprintf("\033[48;5;%dm", rgb)
+	}
+	return fmt.Sprintf("\033[38;5;%dm%s", rgb, lowerHalfBlock)
+}
+
+// RenderGreyscale renders a pixel into ANSI 256 color grey scale values
+// https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
+func RenderGreyscale(ap *ANSIpixel) string {
+	r := float32(ap.R) / 256 * 0.2126
+	g := float32(ap.G) / 256 * 0.7152
+	b := float32(ap.B) / 256 * 0.0722
+	y := uint8((r+g+b)*24) + 232
+
+	if ap.upper {
+		return fmt.Sprintf("\033[48;5;%dm", y)
+	}
+	return fmt.Sprintf("\033[38;5;%dm%s", y, lowerHalfBlock)
+}
+
+func (ai *ANSImage) SetRender(render RenderFunc) {
+	ai.render = render
 }
 
 // Height gets total rows of ANSImage.
@@ -150,8 +177,8 @@ func (ai *ANSImage) Render() string {
 			go func(r, y int) {
 				var str string
 				for x := 0; x < ai.w; x++ {
-					str += ai.pixmap[y][x].Render()   // upper pixel
-					str += ai.pixmap[y+1][x].Render() // lower pixel
+					str += ai.render(ai.pixmap[y][x])   // upper pixel
+					str += ai.render(ai.pixmap[y+1][x]) // lower pixel
 				}
 				str += "\033[0m\n" // reset ansi style
 				ch <- renderData{row: r, render: str}
@@ -219,6 +246,7 @@ func New(h, w int) (*ANSImage, error) {
 			}
 			return v
 		}(),
+		render: Render24Bit,
 	}
 
 	return ansimage, nil

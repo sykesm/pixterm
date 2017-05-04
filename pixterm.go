@@ -39,11 +39,13 @@ const (
 )
 
 var (
-	flagCredits bool
-	flagMatte   string
-	flagScale   uint
-	flagRows    uint
-	flagCols    uint
+	flagCredits   bool
+	flagMatte     string
+	flagScale     uint
+	flagRows      uint
+	flagCols      uint
+	flag256Color  bool
+	flagGreyscale bool
 )
 
 func main() {
@@ -104,6 +106,9 @@ func configureFlags() {
 	flag.CommandLine.UintVar(&flagScale, "s", 0, "scale `method`:\n\t  0 - resize (default)\n\t  1 - fill\n\t  2 - fit")
 	flag.CommandLine.UintVar(&flagRows, "tr", 0, "terminal `rows` (optional, >=2)")
 	flag.CommandLine.UintVar(&flagCols, "tc", 0, "terminal `columns` (optional, >=2)")
+
+	flag.CommandLine.BoolVar(&flag256Color, "256", false, "256 color mode")
+	flag.CommandLine.BoolVar(&flagGreyscale, "g", false, "greyscale mode")
 
 	flag.CommandLine.Parse(os.Args[1:])
 }
@@ -182,6 +187,13 @@ func runPixterm() {
 	}
 	if err != nil {
 		throwError(1, err)
+	}
+
+	if flag256Color {
+		pix.SetRender(ansimage.Render256Color)
+	}
+	if flagGreyscale {
+		pix.SetRender(ansimage.RenderGreyscale)
 	}
 
 	// draw ANSImage to terminal
